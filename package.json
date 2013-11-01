@@ -4,7 +4,7 @@
   "dependencies":{
     "coffee-script":"",
     "moment":"",
-    "redis":""
+    "amqp":""
   },
   "engines":{
     "node":"~0.6.0"

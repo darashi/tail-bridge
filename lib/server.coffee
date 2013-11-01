@@ -1,10 +1,10 @@
 {Tailer} = require('./tailer')
-redis = require('redis')
+amqp = require('amqp')
 
 exports.run = ->
-  if !process.env.DB_PATH || !process.env.REDIS_CHANNEL
+  if !process.env.DB_PATH || !process.env.AMQP_EXCHANGE_NAME
     console.info "Usage:"
-    console.info "DB_PATH='[/data/twitter/]YYYY/MM/[twitter].YYYYMMDDHH[.jsons]' REDIS_CHANNEL=twitter"+process.argv[1]
+    console.info "DB_PATH='[/data/twitter/]YYYY/MM/[twitter].YYYYMMDDHH[.jsons]' AMQP_EXCHANGE_NAME=twitter "+process.argv[1]
     process.exit(-1)
 
   setInterval ->
@@ -28,26 +28,14 @@ exports.run = ->
   tailer.on 'stats', (stats) ->
     console.log("#{stats.numReceived} tweets, #{stats.tps.toFixed(1)} TPS")
 
-  channel = process.env.REDIS_CHANNEL
-  host = process.env.REDIS_HOST || '127.0.0.1'
-  port = process.env.REDIS_PORT || 6379
-  password = process.env.REDIS_PASSWORD
-  console.log "Connecting to Redis on %s:%s", host, port
-  client = redis.createClient(port, host)
-
-  if password?
-    console.info "Setting Redis password"
-    client.auth(password)
-
-  client.on 'error', (error) ->
-    console.warn 'Redis connection error: %s', error
-
-  client.on 'connect', ->
-    console.info 'Redis connected'
-
-  console.info "Messages are directed to channel '%s'", channel
-
-  tailer.on 'data', (json) ->
-    client.publish(channel, json)
+  url = process.env.AMQP_URL
+  exchangeName = process.env.AMQP_EXCHANGE_NAME
+  amqpConnection = amqp.createConnection(url: url, reconnect: true)
+  amqpConnection.on 'ready', ->
+    console.log 'AMQP ' + url + ' ready'
+    amqpConnection.exchange exchangeName, type: 'fanout', (exchange) ->
+      console.log 'Exchange ' + exchange.name + ' is ready'
+      tailer.on 'data', (json) ->
+        exchange.publish '', json, contentType: 'text/json'
 
   tailer.start()
